@@ -1,0 +1,8 @@
+/target
+/*.py
+/*.pyc
+Cargo.lock
+
+# Temporary files
+*.swp
+

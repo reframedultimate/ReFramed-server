@@ -1,0 +1,20 @@
+[10:16 PM] jam1garner: anyways I'd say:
+1. start by learning how to make a skyline plugin
+2. learn how to hook status scripts (I don't remember how to do that but someone here does, probably ask around in #code-editsss🐍 probably)
+3. make a simple plugin where you just hook some common status scripts like jump, double jump, roll, whatever you're interested in. when the hook gets hit just print out the current status
+4. learn the basics of Rust's networking (I swear it's simpler than in C, shouldn't be hard to pick up)
+5. when your plugin's main is run (i.e. when the game is booting) spawn a new a thread and within that thread start up a TcpListener
+6. Learn serde (https://serde.rs/), this will make your life extremely easy for actually sending all your information through the TcpListener
+7. have a program running on your pc that connects to your switch to pull off your data from the TcpListener, then do whatever you want with the data
+
+note: alternatively, if you'd prefer, you could just log what you're interested in to a file
+
+How to spawn a thread: https://doc.rust-lang.org/std/thread/index.html#spawning-a-thread
+TcpListener docs: https://doc.rust-lang.org/std/net/struct.TcpListener.html
+[10:18 PM] jam1garner: you might find this helpful: https://github.com/jam1garner/smush_info
+[10:18 PM] TheComet: This is great information thanks a bunch
+[10:18 PM] jam1garner: note that that last link, while similar to what you want, uses some outdated stuff
+[10:19 PM] jam1garner: for example, since then we've implemented Rust's std::net tcp stuff
+[10:19 PM] jam1garner: while that link uses bsd sockets
+[10:21 PM] jam1garner: here's an example that uses smush_info in order to graph the percentage in real time https://github.com/jam1garner/graph_percent
+
