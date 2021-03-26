@@ -1,30 +1,15 @@
-use crate::protocol::Protocol;
-
 use std::sync::Mutex;
 use std::vec::Vec;
 use std::net::{TcpListener, TcpStream};
-use std::io::{Read, Write, Error, ErrorKind};
-use std::convert::From;
+use std::io::{Read, Write, Error};
+use std::thread;
+use std::time::Duration;
 
-pub enum ServerError {
-    AddressInUse,
-    Other
-}
+use crate::protocol;
 
 pub struct Server {
     clients: Mutex<Vec<TcpStream>>
 }
-
-impl From<Error> for ServerError {
-    fn from(err: Error) -> ServerError {
-        match err.kind() {
-            ErrorKind::AddrInUse => ServerError::AddressInUse,
-            _ => ServerError::Other
-        }
-    }
-}
-
-impl Protocol for Server {}
 
 impl Server {
     pub fn new() -> Server {
@@ -33,25 +18,44 @@ impl Server {
         }
     }
 
-    pub fn listen_for_incoming_connections(&self) -> Result<(), ServerError> {
-        let listener = TcpListener::bind("0.0.0.0:42069")?;
+    pub fn run(&self) {
+        loop {
+            self.listen_for_incoming_connections();
+            thread::sleep(Duration::from_secs(5));
+        }
+    }
 
-        println!("[uhrecorder] Started server on {}", listener.local_addr()?);
+    fn accept_client(&self, stream_result: Result<TcpStream, Error>) -> Result<(), Error> {
+        let mut client = stream_result?;
+        protocol::send_constants(&mut client)?;
+        client.set_nonblocking(true)?;
+
+        println!("[uhrecorder] Accepted client connection {}", client.local_addr()?);
+        self.clients.lock().unwrap().push(client);
+        Ok(())
+    }
+
+    fn listen_for_incoming_connections(&self) {
+        // I have no idea if the thread even exits after a sleep cycle, but it can't hurt
+        // to make sure any old clients are discarded
+        self.clients.lock().unwrap().clear();
+
+        let listener = match TcpListener::bind("0.0.0.0:42069") {
+            Ok(listener) => listener,
+            Err(e) => { println!("[uhrecorder] Failed to bind socket: {}", e); return; }
+        };
+
+        println!("[uhrecorder] Started server on {}", listener.local_addr().unwrap());
 
         for stream in listener.incoming() {
             self.poll();
-            match stream {
-                Ok(mut stream) => {
-                    println!("[uhrecorder] Accepted client connection {}", stream.local_addr()?);
-                    stream.set_nonblocking(true)?;
-                    Server::send_constants(&mut stream)?;
-                    self.clients.lock().unwrap().push(stream);
-                },
-                Err(e) => println!("[uhrecorder] Failed to accept client connection: {}", e)
+            match self.accept_client(stream) {
+                Err(e) => println!("[uhrecorder] Failed to accept client connection: {}", e),
+                _ => ()
             };
         }
 
-        Ok(())
+        self.clients.lock().unwrap().clear();
     }
 
     pub fn broadcast(&self, data: &[u8]) {
