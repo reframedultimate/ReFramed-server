@@ -92,7 +92,9 @@ pub fn main() {
     acmd::add_custom_hooks!(once_per_fighter_frame);
 
     std::thread::spawn(move || {
-        SERVER.run();
+        loop {
+            SERVER.listen_for_incoming_connections();
+        }
     });
 }
 
