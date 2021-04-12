@@ -73,6 +73,10 @@ pub fn once_per_fighter_frame(fighter : &mut L2CFighterCommon) {
         lua_bind::FighterManager::get_fighter_information(fighter_manager, app::FighterEntryID(fighter_entry_id)) as *mut app::FighterInformation
     };
 
+    // TODO
+    // AttackModule: is_infliction_status -> whether a move connected or not
+    // ControlModule: get_attack_air_kind -> differentiate aerial attacks
+
     let stock_count = unsafe { lua_bind::FighterInformation::stock_count(fighter_information) as u8 };
     let frames_left = unsafe { get_remaining_time_as_frame() };
     let fighter_status_kind = unsafe { lua_bind::StatusModule::status_kind(module_accessor) };
