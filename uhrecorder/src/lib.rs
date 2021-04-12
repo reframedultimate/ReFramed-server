@@ -74,15 +74,28 @@ pub fn once_per_fighter_frame(fighter : &mut L2CFighterCommon) {
     };
 
     // TODO
-    // AttackModule: is_infliction_status -> whether a move connected or not
-    // ControlModule: get_attack_air_kind -> differentiate aerial attacks
+    // Figure out when BoX sets start and end
 
     let stock_count = unsafe { lua_bind::FighterInformation::stock_count(fighter_information) as u8 };
     let frames_left = unsafe { get_remaining_time_as_frame() };
     let fighter_status_kind = unsafe { lua_bind::StatusModule::status_kind(module_accessor) };
+    let fighter_motion_kind = unsafe{ lua_bind::MotionModule::motion_kind(module_accessor) };
     let fighter_damage = unsafe { lua_bind::DamageModule::damage(module_accessor, 0) };
+    let fighter_shield_size = unsafe { lua_bind::WorkModule::get_float(module_accessor, *lua_const::FIGHTER_INSTANCE_WORK_ID_FLOAT_GUARD_SHIELD) };
+    let attack_connected = unsafe { lua_bind::AttackModule::is_infliction_status(module_accessor, *lua_const::COLLISION_KIND_MASK_HIT) };
+    let hitstun_left = unsafe { lua_bind::WorkModule::get_float(module_accessor, *lua_const::FIGHTER_INSTANCE_WORK_ID_FLOAT_DAMAGE_REACTION_FRAME) };
 
-    protocol::send_fighter_info(&SERVER, frames_left, fighter_entry_id, stock_count, fighter_status_kind, fighter_damage);
+    protocol::send_fighter_info(&SERVER,
+        frames_left,
+        fighter_entry_id,
+        stock_count,
+        fighter_damage,
+        fighter_shield_size,
+        fighter_status_kind,
+        fighter_motion_kind,
+        hitstun_left,
+        attack_connected
+    );
 }
 
 #[skyline::main(name = "uhrecorder")]

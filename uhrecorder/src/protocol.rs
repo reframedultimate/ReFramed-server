@@ -58,18 +58,28 @@ pub fn send_match_end(server: &Server) {
     server.broadcast(&[MessageType::MatchEnd.into()]);
 }
 
-pub fn send_fighter_info(server: &Server, frame: u32, entry_id: i32, stock_count: u8, status_kind: i32, damage: f32) {
+pub fn send_fighter_info(server: &Server, frame: u32, entry_id: i32, stock_count: u8, damage: f32, shield_size: f32, status_kind: i32, motion_kind: u64, hitstun_left: f32, attack_connected: bool) {
     let damage_int = (damage*100.0) as u16;
+    let shield_int = (shield_size*100.0) as u16;
+    let hitstun_int = (hitstun_left*100.0) as u16;
     let [f0, f1, f2, f3] = frame.to_be_bytes();
-    let [status0, status1] = (status_kind as u16).to_be_bytes();
     let [damage0, damage1] = damage_int.to_be_bytes();
+    let [shield0, shield1] = shield_int.to_be_bytes();
+    let [status0, status1] = (status_kind as u16).to_be_bytes();
+    let [m0, m1, m2, m3, m4, m5, m6, m7] = motion_kind.to_be_bytes();
+    let [hitstun0, hitstun1] = hitstun_int.to_be_bytes();
+    let flags = (attack_connected as u8) & 0x01;
     server.broadcast(&[
         MessageType::FighterState.into(),
         f0, f1, f2, f3,
         entry_id as u8,
         stock_count,
+        damage0, damage1,
+        shield0, shield1,
         status0, status1,
-        damage0, damage1
+        m0, m1, m2, m3, m4, m5, m6, m7,
+        hitstun0, hitstun1,
+        flags
     ]);
 }
 
@@ -2240,7 +2250,6 @@ fn send_fighter_status_kind_constants(tx: &mpsc::Sender<Vec<u8>>) -> Result<(), 
         (*FIGHTER_STATUS_KIND_MASTER_FINAL_TARGET_DAMAGE, 255, "FIGHTER_STATUS_KIND_MASTER_FINAL_TARGET_DAMAGE"),
         (*FIGHTER_STATUS_KIND_MASTER_FINAL_TARGET_END, 255, "FIGHTER_STATUS_KIND_MASTER_FINAL_TARGET_END"),
         (*FIGHTER_STATUS_KIND_MASTER_FINAL_TARGET_START, 255, "FIGHTER_STATUS_KIND_MASTER_FINAL_TARGET_START"),
-        (*FIGHTER_STATUS_KIND_MAX, 255, "FIGHTER_STATUS_KIND_MAX"),
         (*FIGHTER_STATUS_KIND_METAKNIGHT_FINAL_DAMAGE, 255, "FIGHTER_STATUS_KIND_METAKNIGHT_FINAL_DAMAGE"),
         (*FIGHTER_STATUS_KIND_METAKNIGHT_FINAL_DAMAGE_FALL, 255, "FIGHTER_STATUS_KIND_METAKNIGHT_FINAL_DAMAGE_FALL"),
         (*FIGHTER_STATUS_KIND_METAKNIGHT_FINAL_DAMAGE_FLY, 255, "FIGHTER_STATUS_KIND_METAKNIGHT_FINAL_DAMAGE_FLY"),
