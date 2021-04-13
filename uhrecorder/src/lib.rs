@@ -75,6 +75,8 @@ pub fn once_per_fighter_frame(fighter : &mut L2CFighterCommon) {
 
     // TODO
     // Figure out when BoX sets start and end
+    // Iframes
+    // XY position
 
     let stock_count = unsafe { lua_bind::FighterInformation::stock_count(fighter_information) as u8 };
     let frames_left = unsafe { get_remaining_time_as_frame() };
