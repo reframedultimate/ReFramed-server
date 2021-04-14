@@ -94,7 +94,7 @@ pub fn send_fighter_info(
     let [status0, status1] = (status_kind as u16).to_be_bytes();
 
     // Motion kinds are hash40 values which use 40 bits (5 bytes)
-    let [motion0, motion1, motion2, motion3, motion4, _, _, _] = motion_kind.to_be_bytes();
+    let [_, _, _, motion0, motion1, motion2, motion3, motion4] = motion_kind.to_be_bytes();
 
     // Booleans can be combined into a single u8
     let flags = 
