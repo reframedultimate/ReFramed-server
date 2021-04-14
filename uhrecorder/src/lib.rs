@@ -86,16 +86,24 @@ pub fn once_per_fighter_frame(fighter : &mut L2CFighterCommon) {
     let fighter_shield_size = unsafe { lua_bind::WorkModule::get_float(module_accessor, *lua_const::FIGHTER_INSTANCE_WORK_ID_FLOAT_GUARD_SHIELD) };
     let attack_connected = unsafe { lua_bind::AttackModule::is_infliction_status(module_accessor, *lua_const::COLLISION_KIND_MASK_HIT) };
     let hitstun_left = unsafe { lua_bind::WorkModule::get_float(module_accessor, *lua_const::FIGHTER_INSTANCE_WORK_ID_FLOAT_DAMAGE_REACTION_FRAME) };
+    let pos_x = unsafe { lua_bind::PostureModule::pos_x(module_accessor) };
+    let pos_y = unsafe { lua_bind::PostureModule::pos_y(module_accessor) };
+    let facing = unsafe { lua_bind::PostureModule::lr(module_accessor) };
+    let iframe_status = unsafe { lua_bind::HitModule::get_total_status(module_accessor, 0) };
 
     protocol::send_fighter_info(&SERVER,
         frames_left,
         fighter_entry_id,
-        stock_count,
+        pos_x,
+        pos_y,
+        facing,
         fighter_damage,
+        hitstun_left,
         fighter_shield_size,
         fighter_status_kind,
         fighter_motion_kind,
-        hitstun_left,
+        iframe_status,
+        stock_count,
         attack_connected
     );
 }

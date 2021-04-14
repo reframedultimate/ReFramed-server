@@ -8,18 +8,20 @@ use std::vec::Vec;
 #[derive(IntoPrimitive)]
 #[repr(u8)]
 enum MessageType {
+    MatchStart,
+    MatchEnd,
+    FighterState,
     FighterKinds,
     FighterStatusKinds,
     StageKinds,
-    MatchStart,
-    MatchEnd,
-    FighterState
+    HitStatusKinds
 }
 
 pub fn send_constants(tx: &mpsc::Sender<Vec<u8>>) -> Result<(), mpsc::SendError<Vec<u8>>> {
     send_fighter_kind_constants(tx)?;
     send_fighter_status_kind_constants(tx)?;
     send_stage_constants(tx)?;
+    send_hit_status_constants(tx)?;
     Ok(())
 }
 
@@ -58,27 +60,65 @@ pub fn send_match_end(server: &Server) {
     server.broadcast(&[MessageType::MatchEnd.into()]);
 }
 
-pub fn send_fighter_info(server: &Server, frame: u32, entry_id: i32, stock_count: u8, damage: f32, shield_size: f32, status_kind: i32, motion_kind: u64, hitstun_left: f32, attack_connected: bool) {
-    let damage_int = (damage*100.0) as u16;
-    let shield_int = (shield_size*100.0) as u16;
-    let hitstun_int = (hitstun_left*100.0) as u16;
-    let [f0, f1, f2, f3] = frame.to_be_bytes();
+pub fn send_fighter_info(
+    server: &Server,
+    frame: u32,
+    entry_id: i32,
+    pos_x: f32,
+    pos_y: f32,
+    facing: f32,
+    damage: f32,
+    hitstun_left: f32,
+    shield_size: f32,
+    status_kind: i32,
+    motion_kind: u64,
+    hit_status_status: u64,
+    stock_count: u8,
+    attack_connected: bool
+) {
+    // We don't really need to know damage beyond 0.02% accuracy and the upper
+    // limit is 999.99%, so multiplying it by 50 lets us store it in one u16
+    let damage_int = (damage*50.0) as u16;
     let [damage0, damage1] = damage_int.to_be_bytes();
+
+    // Shield sizes seem to be around 50ish -> 10000 max leaves some room
+    let shield_int = (shield_size*200.0) as u16;
     let [shield0, shield1] = shield_int.to_be_bytes();
-    let [status0, status1] = (status_kind as u16).to_be_bytes();
-    let [m0, m1, m2, m3, m4, m5, m6, m7] = motion_kind.to_be_bytes();
+
+    // Can't think of any move with hitstun over 1 second (60)
+    // 60*100 = 60000
+    let hitstun_int = (hitstun_left*100.0) as u16;
     let [hitstun0, hitstun1] = hitstun_int.to_be_bytes();
-    let flags = (attack_connected as u8) & 0x01;
+
+    // Highest status value seems to be 872 (I'm looking at you kirby)
+    let [status0, status1] = (status_kind as u16).to_be_bytes();
+
+    // Motion kinds are hash40 values which use 40 bits (5 bytes)
+    let [motion0, motion1, motion2, motion3, motion4, _, _, _] = motion_kind.to_be_bytes();
+
+    // Booleans can be combined into a single u8
+    let flags = 
+        ((attack_connected as u8) << 0)
+      | ((if facing > 0.0 {1} else {0}) << 1);
+
+    // Other 
+    let [frame0, frame1, frame2, frame3] = frame.to_be_bytes();
+    let [posx0, posx1, posx2, posx3] = pos_x.to_be_bytes();
+    let [posy0, posy1, posy2, posy3] = pos_y.to_be_bytes();
+
     server.broadcast(&[
         MessageType::FighterState.into(),
-        f0, f1, f2, f3,
+        frame0, frame1, frame2, frame3,
         entry_id as u8,
-        stock_count,
+        posx0, posx1, posx2, posx3,
+        posy0, posy1, posy2, posy3,
         damage0, damage1,
+        hitstun0, hitstun1,
         shield0, shield1,
         status0, status1,
-        m0, m1, m2, m3, m4, m5, m6, m7,
-        hitstun0, hitstun1,
+        motion0, motion1, motion2, motion3, motion4,
+        hit_status_status as u8,
+        stock_count,
         flags
     ]);
 }
@@ -2592,6 +2632,23 @@ fn send_fighter_status_kind_constants(tx: &mpsc::Sender<Vec<u8>>) -> Result<(), 
         let name_bytes = name.as_bytes();
         let [status0, status1] = (*status as u16).to_be_bytes();
         let data = &[MessageType::FighterStatusKinds.into(), *fighter as u8, status0, status1, name_bytes.len() as u8];
+        let data = &[data, name_bytes].concat();
+        tx.send(data.to_vec())?;
+    }
+    Ok(())
+}
+
+fn send_hit_status_constants(tx: &mpsc::Sender<Vec<u8>>) -> Result<(), mpsc::SendError<Vec<u8>>> {
+    for (kind, name) in [
+        (*HIT_STATUS_INVINCIBLE, "HIT_STATUS_INVINCIBLE"),
+        (*HIT_STATUS_NORMAL, "HIT_STATUS_NORMAL"),
+        (*HIT_STATUS_OFF, "HIT_STATUS_OFF"),
+        (*HIT_STATUS_TERM, "HIT_STATUS_TERM"),
+        (*HIT_STATUS_VALID_TERM, "HIT_STATUS_VALID_TERM"),
+        (*HIT_STATUS_XLU, "HIT_STATUS_XLU"),
+    ].iter() {
+        let name_bytes = name.as_bytes();
+        let data = &[MessageType::HitStatusKinds.into(), *kind as u8, name_bytes.len() as u8];
         let data = &[data, name_bytes].concat();
         tx.send(data.to_vec())?;
     }
