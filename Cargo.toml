@@ -12,6 +12,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 lazy_static = "1.4.0"
+crc = "2.1"
+num = "0.4"
 num_enum = "0.5.1"
 skyline = { git = "https://github.com/ultimate-research/skyline-rs.git" }
 skyline_smash = { git = "https://github.com/ultimate-research/skyline-smash.git" }

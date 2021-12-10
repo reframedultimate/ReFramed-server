@@ -2,4 +2,4 @@
 Cargo.lock
 /.cargo
 /.vscode
-
+*.swp

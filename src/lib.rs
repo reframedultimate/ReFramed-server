@@ -1,11 +1,11 @@
 #![feature(proc_macro_hygiene)]
-
 #[macro_use]
 extern crate lazy_static;
 
 mod server;
 mod game_info;
 mod protocol;
+mod constants;
 
 use skyline;
 use acmd;
@@ -15,6 +15,8 @@ use smash::app;
 use smash::app::lua_bind;
 use smash::lua2cpp::L2CFighterCommon;
 use std::sync::Mutex;
+use std::thread;
+use std::time::Duration;
 
 extern "C" {
     #[link_name="\u{1}_ZN3app14sv_information27get_remaining_time_as_frameEv"]
@@ -121,6 +123,7 @@ pub fn main() {
     std::thread::spawn(move || {
         loop {
             SERVER.listen_for_incoming_connections();
+            thread::sleep(Duration::from_secs(10))
         }
     });
 }
