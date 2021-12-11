@@ -25,7 +25,7 @@ impl Server {
 
     pub fn accept_client(&self, client_stream: TcpStream) {
         // Currently we poll the socket because try_clone() doesn't work
-        match client_stream.set_nonblocking(false) {
+        match client_stream.set_nonblocking(true) {
             Ok(()) => (),
             Err(e) => {
                 println!("[ReFramed] Failed to set nonblocking: {}", e);
@@ -40,41 +40,40 @@ impl Server {
         }
 
         // Because try_clone() doesn't work, we move the whole socket into
-        // a new thread, and as a work-around, read/write to the ends of
-        // two fifo's (since those can be split up between threads)
+        // a new thread, and as a work-around, write to the ends of
+        // a fifo (since those can be split up between threads)
         let (send_tx, send_rx) = mpsc::channel::<Vec<u8>>();
         Server::start_client_thread(client_stream, send_rx);
         self.clients.lock().unwrap().push(send_tx);
     }
 
     pub fn start_client_thread(mut stream: TcpStream, rx: mpsc::Receiver<Vec<u8>>) {
-        // Client thread. Poll socket for new data and forward it to
-        // recv_tx so it can be received in the server thread. Poll
+        // Client thread. Poll socket for new data and process it. Poll
         // send_rx and forward it to the socket so the server thread
         // can send data.
         thread::spawn(move || {
             println!("[ReFramed] Started client thread");
-            let mut buf = vec![];
+            let mut buf: [u8; 32] = [0; 32];
             loop {
 
-                // Forward data we receive from the socket to the "recv" fifo
-                println!("[ReFramed] Receiving data...");
+                // Process any incoming data
                 let data_was_received = match stream.read(&mut buf) {
                     Ok(size) => {
-                        if buf.len() > 0 {
-                            println!("[ReFramed] Received data");
-                            match protocol::recv_data(&buf, &stream) {
-                                Ok(_) => (),
-                                Err(e) => {
-                                    println!("[ReFramed] Receiving end of send channel was closed, exiting client thread");
-                                    break;
-                                }
-                            };
-                            true
-                        } else {
-                            false
+                        if size == 0 {
+                            println!("[ReFramed] socket read() returned 0, exiting client thread");
+                            break;
                         }
+    
+                        match protocol::recv_data(&buf, size, &stream) {
+                            Ok(_) => (),
+                            Err(_) => {
+                                println!("[ReFramed] Receiving end of send channel was closed, exiting client thread");
+                                break;
+                            }
+                        };
+                        true
                     },
+                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock || e.raw_os_error() == Some(11) => false,
                     Err(e) => {
                         println!("[ReFramed] read() failed, exiting listen thread: {}", e);
                         break;
@@ -102,9 +101,6 @@ impl Server {
                     thread::sleep(Duration::from_millis(1000));
                 }
             }
-
-            drop(stream);
-            drop(rx);
         });
     }
 

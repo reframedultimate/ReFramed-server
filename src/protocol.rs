@@ -1,8 +1,8 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use crate::game_info::GameInfo;
+use crate::training_info::TrainingInfo;
 use crate::server::Server;
 use crate::constants;
-use std::vec::Vec;
 use std::net::TcpStream;
 use std::io::Write;
 use std::convert::TryFrom;
@@ -13,7 +13,7 @@ use crc::{Crc, CRC_32_CKSUM};
 enum MessageType {
     ProtocolVersion,
 
-    MappingInfoHash,
+    MappingInfoChecksum,
     MappingInfoRequest,
     MappingInfoFighterKinds,
     MappingInfoFighterStatusKinds,
@@ -30,23 +30,25 @@ enum MessageType {
     FighterState,
 }
 
-pub fn recv_data(buf: &Vec<u8>, stream: &TcpStream) -> std::io::Result<()> {
-    match MessageType::try_from(buf[0]) {
-        Ok(MessageType::ProtocolVersion) => send_protocol_version(stream)?,
-        Ok(MessageType::MappingInfoHash) => send_mapping_info_hash(stream)?,
-        Ok(MessageType::MappingInfoRequest) => send_mapping_info(stream)?,
-        Ok(MessageType::MappingInfoFighterKinds) => {},
-        Ok(MessageType::MappingInfoFighterStatusKinds) => {},
-        Ok(MessageType::MappingInfoStageKinds) => {},
-        Ok(MessageType::MappingInfoHitStatusKinds) => {},
-        Ok(MessageType::MappingInfoRequestComplete) => {},
-        Ok(MessageType::MatchStart) => {},
-        Ok(MessageType::MatchEnd) => {},
-        Ok(MessageType::TrainingStart) => {},
-        Ok(MessageType::TrainingEnd) => {},
-        Ok(MessageType::TrainingReset) => {},
-        Ok(MessageType::FighterState) => {},
-        Err(_) => {}
+pub fn recv_data(buf: &[u8; 32], len: usize, stream: &TcpStream) -> std::io::Result<()> {
+    for i in 0..len {
+        match MessageType::try_from(buf[i]) {
+            Ok(MessageType::ProtocolVersion) => send_protocol_version(stream)?,
+            Ok(MessageType::MappingInfoChecksum) => send_mapping_info_checksum(stream)?,
+            Ok(MessageType::MappingInfoRequest) => send_mapping_info(stream)?,
+            Ok(MessageType::MappingInfoFighterKinds) => {},
+            Ok(MessageType::MappingInfoFighterStatusKinds) => {},
+            Ok(MessageType::MappingInfoStageKinds) => {},
+            Ok(MessageType::MappingInfoHitStatusKinds) => {},
+            Ok(MessageType::MappingInfoRequestComplete) => {},
+            Ok(MessageType::MatchStart) => {},
+            Ok(MessageType::MatchEnd) => {},
+            Ok(MessageType::TrainingStart) => {},
+            Ok(MessageType::TrainingEnd) => {},
+            Ok(MessageType::TrainingReset) => {},
+            Ok(MessageType::FighterState) => {},
+            Err(_) => {}
+        }
     }
     Ok(())
 }
@@ -59,17 +61,33 @@ fn send_protocol_version(mut stream: &TcpStream) -> std::io::Result<()> {
     Ok(())
 }
 
-fn send_mapping_info_hash(mut stream: &TcpStream) -> std::io::Result<()> {
+fn send_mapping_info_checksum(mut stream: &TcpStream) -> std::io::Result<()> {
     let crc = Crc::<u32>::new(&CRC_32_CKSUM);
     let mut digest = crc.digest();
+
     for (kind, name) in constants::FIGHTER_KINDS.iter() {
-        let [kind0, kind1] = (kind.as_lua_int().get_int() as u16).to_be_bytes();
-        let bytes = &[kind0, kind1];
-        let bytes = &[bytes, name.as_bytes()];
-        //digest.update(bytes);
+        digest.update(&(kind.as_lua_int().get_int() as u8).to_be_bytes());
+        digest.update(name.as_bytes());
     }
+
+    for (kind, name) in constants::STAGE_KINDS.iter() {
+        digest.update(&(*kind as u16).to_be_bytes());
+        digest.update(name.as_bytes());
+    }
+
+    for (status, fighter, name) in constants::FIGHTER_STATUS_KINDS.iter() {
+        digest.update(&(fighter.as_lua_int().get_int() as u8).to_be_bytes());
+        digest.update(&(status.as_lua_int().get_int() as u16).to_be_bytes());
+        digest.update(name.as_bytes());
+    }
+
+    for (kind, name) in constants::HIT_STATUS_KINDS.iter() {
+        digest.update(&(kind.as_lua_int().get_int() as u8).to_be_bytes());
+        digest.update(name.as_bytes());
+    }
+
     let [h0, h1, h2, h3] = digest.finalize().to_be_bytes();
-    stream.write(&[MessageType::MappingInfoHash.into(), h0, h1, h2, h3])?;
+    stream.write(&[MessageType::MappingInfoChecksum.into(), h0, h1, h2, h3])?;
     println!("[ReFramed] Sending mapping info hash");
     Ok(())
 }
@@ -105,7 +123,7 @@ pub fn send_match_start(server: &Server, info: &GameInfo) {
     data.push(p2name_bytes.len() as u8);
     data.extend_from_slice(p2name_bytes);
 
-    println!("[uhrecorder] Match start: stage: {}, p1: {} ({}), p2: {} ({})",
+    println!("[ReFramed] Match start: stage: {}, p1: {} ({}), p2: {} ({})",
         stage_id,
         info.p1_name(), info.p1_fighter_kind(),
         info.p2_name(), info.p2_fighter_kind()
@@ -115,8 +133,33 @@ pub fn send_match_start(server: &Server, info: &GameInfo) {
 }
 
 pub fn send_match_end(server: &Server) {
-    println!("[uhrecorder] Match end");
+    println!("[ReFramed] Match end");
     server.broadcast(&[MessageType::MatchEnd.into()]);
+}
+
+pub fn send_training_start(server: &Server, info: &TrainingInfo) {
+    let stage_id = info.get_stage();
+    let stage_id_u = ((stage_id >> 8) & 0xFF) as u8;
+    let stage_id_l = ((stage_id >> 0) & 0xFF) as u8;
+    let data = &[
+        MessageType::TrainingStart.into(),
+        stage_id_u, stage_id_l,
+        info.p1_fighter_kind() as u8,
+        info.cpu_fighter_kind() as u8
+    ];
+
+    println!("[ReFramed] Training Start: stage: {}, p1: {}, cpu: {}",
+        stage_id,
+        info.p1_fighter_kind(),
+        info.cpu_fighter_kind()
+    );
+
+    server.broadcast(data);
+}
+
+pub fn send_training_end(server: &Server) {
+    println!("[ReFramed] Training end");
+    server.broadcast(&[MessageType::TrainingEnd.into()]);
 }
 
 pub fn send_fighter_info(
@@ -214,6 +257,9 @@ fn send_fighter_status_kind_constants(mut stream: &TcpStream) -> std::io::Result
         let data = &[MessageType::MappingInfoFighterStatusKinds.into(), fighter.as_lua_int().get_int() as u8, status0, status1, name_bytes.len() as u8];
         let data = &[data, name_bytes].concat();
         stream.write(&data)?;
+
+        // Something horrible happens if we don't do this
+        std::thread::sleep(std::time::Duration::from_millis(5));
     }
     Ok(())
 }
