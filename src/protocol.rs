@@ -61,7 +61,7 @@ fn send_protocol_version(mut stream: &TcpStream) -> std::io::Result<()> {
     Ok(())
 }
 
-fn send_mapping_info_checksum(mut stream: &TcpStream) -> std::io::Result<()> {
+fn calc_mapping_info_checksum() -> u32 {
     let crc = Crc::<u32>::new(&CRC_32_CKSUM);
     let mut digest = crc.digest();
 
@@ -86,14 +86,22 @@ fn send_mapping_info_checksum(mut stream: &TcpStream) -> std::io::Result<()> {
         digest.update(name.as_bytes());
     }
 
-    let [h0, h1, h2, h3] = digest.finalize().to_be_bytes();
+    digest.finalize()
+}
+
+fn send_mapping_info_checksum(mut stream: &TcpStream) -> std::io::Result<()> {
+    let [h0, h1, h2, h3] = calc_mapping_info_checksum().to_be_bytes();
     stream.write(&[MessageType::MappingInfoChecksum.into(), h0, h1, h2, h3])?;
-    println!("[ReFramed] Sending mapping info hash");
+    println!("[ReFramed] Sending mapping info checksum");
     Ok(())
 }
 
 pub fn send_mapping_info(mut stream: &TcpStream) -> std::io::Result<()> {
-    stream.write(&[MessageType::MappingInfoRequest.into()])?;
+    println!("[ReFramed] Sending mapping info");
+
+    let [h0, h1, h2, h3] = calc_mapping_info_checksum().to_be_bytes();
+    stream.write(&[MessageType::MappingInfoRequest.into(), h0, h1, h2, h3])?;
+
     send_fighter_kind_constants(stream)?;
     send_fighter_status_kind_constants(stream)?;
     send_stage_constants(stream)?;
@@ -259,7 +267,7 @@ fn send_fighter_status_kind_constants(mut stream: &TcpStream) -> std::io::Result
         stream.write(&data)?;
 
         // Something horrible happens if we don't do this
-        std::thread::sleep(std::time::Duration::from_millis(5));
+        std::thread::sleep(std::time::Duration::from_millis(3));
     }
     Ok(())
 }
