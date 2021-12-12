@@ -21,9 +21,12 @@ enum MessageType {
     MappingInfoHitStatusKinds,
     MappingInfoRequestComplete,
 
+
     MatchStart,
+    MatchResume,
     MatchEnd,
     TrainingStart,
+    TrainingResume,
     TrainingReset,
     TrainingEnd,
 
@@ -42,8 +45,10 @@ pub fn recv_data(buf: &[u8; 32], len: usize, stream: &TcpStream) -> std::io::Res
             Ok(MessageType::MappingInfoHitStatusKinds) => {},
             Ok(MessageType::MappingInfoRequestComplete) => {},
             Ok(MessageType::MatchStart) => {},
+            Ok(MessageType::MatchResume) => send_match_resume(stream)?,
             Ok(MessageType::MatchEnd) => {},
             Ok(MessageType::TrainingStart) => {},
+            Ok(MessageType::TrainingResume) => send_training_resume(stream)?,
             Ok(MessageType::TrainingEnd) => {},
             Ok(MessageType::TrainingReset) => {},
             Ok(MessageType::FighterState) => {},
@@ -110,7 +115,7 @@ pub fn send_mapping_info(mut stream: &TcpStream) -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn send_match_start(server: &Server, info: &GameInfo) {
+fn match_start_payload(info: &GameInfo) -> Vec<u8> {
     let stage_id = info.get_stage() as u16;
     let stage_id_u = ((stage_id >> 8) & 0xFF) as u8;
     let stage_id_l = ((stage_id >> 0) & 0xFF) as u8;
@@ -118,7 +123,6 @@ pub fn send_match_start(server: &Server, info: &GameInfo) {
     let p2name_bytes = info.p2_name().as_bytes();
 
     let mut data = vec![
-        MessageType::MatchStart.into(),
         stage_id_u, stage_id_l,
         2,  // 2 players, hardcoded for now
         info.p1_entry_id() as u8,
@@ -131,8 +135,14 @@ pub fn send_match_start(server: &Server, info: &GameInfo) {
     data.push(p2name_bytes.len() as u8);
     data.extend_from_slice(p2name_bytes);
 
+    data
+}
+
+pub fn broadcast_match_start(server: &Server, info: &GameInfo) {
+    let mut data = match_start_payload(&info);
+    data.insert(0, MessageType::MatchStart.into());
     println!("[ReFramed] Match start: stage: {}, p1: {} ({}), p2: {} ({})",
-        stage_id,
+        info.get_stage(),
         info.p1_name(), info.p1_fighter_kind(),
         info.p2_name(), info.p2_fighter_kind()
     );
@@ -140,37 +150,62 @@ pub fn send_match_start(server: &Server, info: &GameInfo) {
     server.broadcast(&data);
 }
 
-pub fn send_match_end(server: &Server) {
+fn send_match_resume(mut stream: &TcpStream) -> std::io::Result<()> {
+    let game_info = GameInfo::get().lock().unwrap();
+    if game_info.match_is_running() {
+        let mut data = match_start_payload(&game_info);
+        data.insert(0, MessageType::MatchResume.into());
+        stream.write(&data)?;
+    }
+    Ok(())
+}
+
+pub fn broadcast_match_end(server: &Server) {
     println!("[ReFramed] Match end");
     server.broadcast(&[MessageType::MatchEnd.into()]);
 }
 
-pub fn send_training_start(server: &Server, info: &TrainingInfo) {
+fn training_start_payload(info: &TrainingInfo) -> [u8; 4] {
     let stage_id = info.get_stage();
     let stage_id_u = ((stage_id >> 8) & 0xFF) as u8;
     let stage_id_l = ((stage_id >> 0) & 0xFF) as u8;
-    let data = &[
-        MessageType::TrainingStart.into(),
+    [
         stage_id_u, stage_id_l,
         info.p1_fighter_kind() as u8,
         info.cpu_fighter_kind() as u8
-    ];
+    ]
+}
 
+pub fn broadcast_training_start(server: &Server, info: &TrainingInfo) {
     println!("[ReFramed] Training Start: stage: {}, p1: {}, cpu: {}",
-        stage_id,
+        info.get_stage(),
         info.p1_fighter_kind(),
         info.cpu_fighter_kind()
     );
 
-    server.broadcast(data);
+    let mut data: Vec<u8> = Vec::new();
+    data.push(MessageType::TrainingStart.into());
+    data.extend_from_slice(&training_start_payload(&info));
+    server.broadcast(&data);
 }
 
-pub fn send_training_end(server: &Server) {
+fn send_training_resume(mut stream: &TcpStream) -> std::io::Result<()> {
+    let training_info = TrainingInfo::get().lock().unwrap();
+    if training_info.is_running() {
+        let mut data: Vec<u8> = Vec::new();
+        data.push(MessageType::TrainingResume.into());
+        data.extend_from_slice(&training_start_payload(&training_info));
+        stream.write(&data)?;
+    }
+    Ok(())
+}
+
+pub fn broadcast_training_end(server: &Server) {
     println!("[ReFramed] Training end");
     server.broadcast(&[MessageType::TrainingEnd.into()]);
 }
 
-pub fn send_fighter_info(
+pub fn broadcast_fighter_info(
     server: &Server,
     frame: u32,
     entry_id: i32,

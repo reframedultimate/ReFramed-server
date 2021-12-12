@@ -1,6 +1,6 @@
 #![feature(proc_macro_hygiene)]
 #[macro_use]
-extern crate lazy_static;
+
 
 mod server;
 mod game_info;
@@ -8,6 +8,9 @@ mod training_info;
 mod protocol;
 mod constants;
 
+use training_info::TrainingInfo;
+use game_info::GameInfo;
+use lazy_static::lazy_static;
 use skyline;
 use acmd;
 use smash::app::{utility, sv_system, smashball};
@@ -15,7 +18,6 @@ use smash::lib::{lua_const, L2CValue};
 use smash::app;
 use smash::app::lua_bind;
 use smash::lua2cpp::{L2CFighterCommon, L2CFighterBase, L2CFighterBase_global_reset};
-use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
@@ -29,8 +31,6 @@ extern "C" {
 
 lazy_static!{
     static ref SERVER: server::Server = server::Server::new();
-    static ref GAME_INFO: Mutex<game_info::GameInfo> = Mutex::new(game_info::GameInfo::new());
-    static ref TRAINING_INFO: Mutex<training_info::TrainingInfo> = Mutex::new(training_info::TrainingInfo::new());
 }
 static mut FIGHTER_MANAGER_ADDR: usize = 0;
 
@@ -122,17 +122,17 @@ pub fn handle_fighter_global_reset(fighter: &mut L2CFighterBase) -> L2CValue {
     let is_training_mode = unsafe { smashball::is_training_mode() };
 
     if is_training_mode {
-        let mut training_info = TRAINING_INFO.lock().unwrap();
+        let mut training_info = TrainingInfo::get().lock().unwrap();
         if !training_info.is_running() {
             training_info.set_start_pending();
         }
     }
 
     if !is_training_mode && !is_ready_go && is_result_mode {
-        let mut game_info = GAME_INFO.lock().unwrap();
+        let mut game_info = GameInfo::get().lock().unwrap();
         if game_info.match_is_running() {
             game_info.set_match_end();
-            protocol::send_match_end(&SERVER);
+            protocol::broadcast_match_end(&SERVER);
         }
     }
 
@@ -151,7 +151,7 @@ pub fn once_per_frame_per_fighter(fighter : &mut L2CFighterCommon) {
     let is_training_mode = unsafe { smashball::is_training_mode() };
 
     if is_training_mode {
-        let mut training_info = TRAINING_INFO.lock().unwrap();
+        let mut training_info = TrainingInfo::get().lock().unwrap();
 
         // Start notification logic. Have to collect info over multiple
         // callbacks to this function before being able to send
@@ -168,16 +168,14 @@ pub fn once_per_frame_per_fighter(fighter : &mut L2CFighterCommon) {
 
             if training_info.have_enough_info_to_start() {
                 training_info.start();
-                protocol::send_training_start(&SERVER, &training_info);
+                protocol::broadcast_training_start(&SERVER, &training_info);
             }
         }
 
         // Stop notification logic
-        if !is_ready_go {
-            if training_info.is_running() {
-                training_info.stop();
-                protocol::send_training_end(&SERVER);
-            }
+        if !is_ready_go && training_info.is_running() {
+            training_info.stop();
+            protocol::broadcast_training_end(&SERVER);
         }
 
         // Don't send player states if training mode hasn't started
@@ -191,7 +189,7 @@ pub fn once_per_frame_per_fighter(fighter : &mut L2CFighterCommon) {
             return;
         }
 
-        let mut game_info = GAME_INFO.lock().unwrap();
+        let mut game_info = GameInfo::get().lock().unwrap();
 
         // Start notification logic. Have to collect info over multiple
         // callbacks to this function before being able to send the
@@ -205,7 +203,7 @@ pub fn once_per_frame_per_fighter(fighter : &mut L2CFighterCommon) {
 
             if game_info.have_enough_info_to_start_match() {
                 game_info.set_match_start();
-                protocol::send_match_start(&SERVER, &game_info);
+                protocol::broadcast_match_start(&SERVER, &game_info);
             }
         }
 
@@ -236,7 +234,7 @@ pub fn once_per_frame_per_fighter(fighter : &mut L2CFighterCommon) {
     let facing = unsafe { lua_bind::PostureModule::lr(module_accessor) };
     let iframe_status = unsafe { lua_bind::HitModule::get_total_status(module_accessor, 0) };
 
-    protocol::send_fighter_info(&SERVER,
+    protocol::broadcast_fighter_info(&SERVER,
         frames_left,
         fighter_entry_id,
         pos_x,

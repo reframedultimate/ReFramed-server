@@ -1,8 +1,7 @@
-use std::sync::Mutex;
 use std::vec::Vec;
 use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
-use std::sync::mpsc;
+use std::sync::{mpsc, Mutex};
 use std::thread;
 use std::time::Duration;
 

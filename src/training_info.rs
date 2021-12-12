@@ -1,3 +1,10 @@
+use lazy_static::lazy_static;
+use std::sync::Mutex;
+
+lazy_static!{
+    static ref TRAINING_INFO: Mutex<TrainingInfo> = Mutex::new(TrainingInfo::new());
+}
+
 pub struct TrainingInfo {
     start_pending: bool,
     is_running: bool,
@@ -7,6 +14,10 @@ pub struct TrainingInfo {
 }
 
 impl TrainingInfo {
+    pub fn get() -> &'static Mutex<Self> {
+        &TRAINING_INFO
+    }
+
     pub fn new() -> Self {
         Self {
             start_pending: false,

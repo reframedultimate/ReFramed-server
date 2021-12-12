@@ -1,3 +1,10 @@
+use lazy_static::lazy_static;
+use std::sync::Mutex;
+
+lazy_static!{
+    static ref GAME_INFO: Mutex<GameInfo> = Mutex::new(GameInfo::new());
+}
+
 pub struct GameInfo {
     match_is_running: bool,
 
@@ -13,8 +20,12 @@ pub struct GameInfo {
 }
 
 impl GameInfo {
-    pub fn new() -> GameInfo {
-        GameInfo {
+    pub fn get() -> &'static Mutex<Self> {
+        &GAME_INFO
+    }
+
+    pub fn new() -> Self {
+        Self {
             match_is_running: false,
             stage_id: -1,
             p1_entry_id: -1,
