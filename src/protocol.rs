@@ -217,7 +217,7 @@ pub fn broadcast_fighter_info(
     shield_size: f32,
     status_kind: i32,
     motion_kind: u64,
-    hit_status_status: u64,
+    hit_status: u64,
     stock_count: u8,
     attack_connected: bool
 ) {
@@ -262,7 +262,7 @@ pub fn broadcast_fighter_info(
         shield0, shield1,
         status0, status1,
         motion0, motion1, motion2, motion3, motion4,
-        hit_status_status as u8,
+        hit_status as u8,
         stock_count,
         flags
     ]);

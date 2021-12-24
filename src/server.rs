@@ -97,7 +97,7 @@ impl Server {
 
                 // Since we're polling, we don't want to exchaust the CPU
                 if !data_was_sent && !data_was_received {
-                    thread::sleep(Duration::from_millis(1000));
+                    thread::sleep(Duration::from_millis(50));
                 }
             }
         });
