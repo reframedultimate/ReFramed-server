@@ -2,14 +2,16 @@
 #[macro_use]
 
 
-mod server;
-mod game_info;
-mod training_info;
-mod protocol;
 mod constants;
+mod game_info;
+mod protocol;
+//mod replay;
+mod server;
+mod training_info;
 
 use training_info::TrainingInfo;
 use game_info::GameInfo;
+//use replay::ReplayManager;
 use lazy_static::lazy_static;
 use skyline;
 use acmd;
@@ -234,6 +236,15 @@ pub fn once_per_frame_per_fighter(fighter : &mut L2CFighterCommon) {
     let facing = unsafe { lua_bind::PostureModule::lr(module_accessor) };
     let iframe_status = unsafe { lua_bind::HitModule::get_total_status(module_accessor, 0) };
 
+    // Hitlag frames left on the opponent. Weird, seems to only work for
+    // "normal" attacks, not electric (such as pika dair, nair, tjolt). Same
+    // goes for the is_stop flag.
+    let hitlag_left = unsafe { lua_bind::StopModule::get_hit_stop_real_frame(module_accessor) };
+    //let is_stop = unsafe { lua_bind::StopModule::is_stop(module_accessor) };
+
+    // This is true if the opponent is in hitlag
+    let opponent_in_hitlag = unsafe { lua_bind::FighterStopModuleImpl::is_damage_stop(module_accessor) };
+
     protocol::broadcast_fighter_info(&SERVER,
         frames_left,
         fighter_entry_id,
@@ -241,13 +252,15 @@ pub fn once_per_frame_per_fighter(fighter : &mut L2CFighterCommon) {
         pos_y,
         facing,
         fighter_damage,
+        hitlag_left,
         hitstun_left,
         fighter_shield_size,
         fighter_status_kind,
         fighter_motion_kind,
         iframe_status,
         stock_count,
-        attack_connected
+        attack_connected,
+        opponent_in_hitlag,
     );
 }
 
@@ -255,7 +268,7 @@ fn nro_main(nro: &skyline::nro::NroInfo<'_>) {
     match nro.name {
         "common" => {
             skyline::install_hooks!(
-                handle_fighter_global_reset
+                handle_fighter_global_reset,
             );
         },
         _ => (),

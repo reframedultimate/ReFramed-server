@@ -213,13 +213,15 @@ pub fn broadcast_fighter_info(
     pos_y: f32,
     facing: f32,
     damage: f32,
+    _hitlag_left: u64,  // This value doesn't work for all attacks, so better not send it until we find a solution
     hitstun_left: f32,
     shield_size: f32,
     status_kind: i32,
     motion_kind: u64,
     hit_status: u64,
     stock_count: u8,
-    attack_connected: bool
+    attack_connected: bool,
+    opponent_in_hitlag: bool
 ) {
     // We don't really need to know damage beyond 0.02% accuracy and the upper
     // limit is 999.99%, so multiplying it by 50 lets us store it in one u16
@@ -244,7 +246,8 @@ pub fn broadcast_fighter_info(
     // Booleans can be combined into a single u8
     let flags = 
         ((attack_connected as u8) << 0)
-      | ((if facing > 0.0 {1} else {0}) << 1);
+      | ((if facing > 0.0 {1} else {0}) << 1)
+      | ((opponent_in_hitlag as u8) << 2);
 
     // Other 
     let [frame0, frame1, frame2, frame3] = frame.to_be_bytes();
