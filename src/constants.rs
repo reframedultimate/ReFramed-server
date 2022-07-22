@@ -1,7 +1,7 @@
 use smash::lib::lua_const::*;
 use smash::cpp::l2c_value::LuaConst;
 
-pub const STAGE_KINDS: [(i32, &str); 12] = [
+pub const STAGE_KINDS: [(i32, &str); 13] = [
         (0,   "Battlefield"),
         (1,   "Final Destination"),  // BF Omega form
         (3,   "Final Destination"),
@@ -13,7 +13,8 @@ pub const STAGE_KINDS: [(i32, &str); 12] = [
         (107, "Pokemon Stadium 2"),
         (242, "Kalos Pokemon League"),
         (257, "Town and City"),
-        (347, "Small Battlefield")
+        (347, "Small Battlefield"),
+        (361, "Hollow Bastion"),
 ];
 
 pub const HIT_STATUS_KINDS: [(LuaConst, &str); 6] = [
@@ -25,7 +26,7 @@ pub const HIT_STATUS_KINDS: [(LuaConst, &str); 6] = [
         (HIT_STATUS_XLU, "HIT_STATUS_XLU"),
 ];
 
-pub const FIGHTER_KINDS: [(LuaConst, &str); 93] = [
+pub const FIGHTER_KINDS: [(LuaConst, &str); 95] = [
         (FIGHTER_KIND_MARIO,        "Mario"),
         (FIGHTER_KIND_DONKEY,       "Donkey Kong"),
         (FIGHTER_KIND_LINK,         "Link"),
@@ -119,6 +120,8 @@ pub const FIGHTER_KINDS: [(LuaConst, &str); 93] = [
         (FIGHTER_KIND_MIIENEMYF,    ""),
         (FIGHTER_KIND_MIIENEMYS,    ""),
         (FIGHTER_KIND_MIIENEMYG,    ""),
+        (FIGHTER_KIND_DEMON,        "Kazuya"),
+        (FIGHTER_KIND_TRAIL,        "Sora"),
 ];
 
 pub const FIGHTER_STATUS_KINDS: [(LuaConst, LuaConst, &str); 2375] = [
