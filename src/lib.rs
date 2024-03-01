@@ -1,8 +1,8 @@
 #![feature(proc_macro_hygiene)]
 #[macro_use]
 
-
 mod constants;
+mod player_tags;
 mod game_info;
 mod protocol;
 //mod replay;
@@ -145,9 +145,8 @@ pub fn once_per_frame_per_fighter(fighter : &mut L2CFighterCommon) {
     let lua_state = fighter.lua_state_agent;
     let module_accessor = unsafe { sv_system::battle_object_module_accessor(lua_state) };
     let fighter_manager = unsafe { *(FIGHTER_MANAGER_ADDR as *mut *mut app::FighterManager) };
-    let fighter_entry_id = unsafe {
-        lua_bind::WorkModule::get_int(module_accessor, *lua_const::FIGHTER_INSTANCE_WORK_ID_INT_ENTRY_ID) as i32
-    };
+    let fighter_entry_id = unsafe { lua_bind::WorkModule::get_int(module_accessor, *lua_const::FIGHTER_INSTANCE_WORK_ID_INT_ENTRY_ID) as i32 };
+    let fighter_skin = unsafe { lua_bind::WorkModule::get_int(module_accessor, *lua_const::FIGHTER_INSTANCE_WORK_ID_INT_COLOR) as i32 };
     let fighter_kind = unsafe { utility::get_kind(module_accessor) };
     let is_ready_go = unsafe { lua_bind::FighterManager::is_ready_go(fighter_manager) };
     let is_training_mode = unsafe { smashball::is_training_mode() };
@@ -197,10 +196,18 @@ pub fn once_per_frame_per_fighter(fighter : &mut L2CFighterCommon) {
         // callbacks to this function before being able to send the
         // start event.
         if is_ready_go && !game_info.match_is_running() {
+            let player_tag = player_tags::get_name_for_slot(fighter_entry_id);
+            let player_tag = if player_tag.is_empty() {
+                format!("Player {}", fighter_entry_id + 1)
+            } else {
+                player_tag
+            };
+
             game_info.set_player_info(
                     fighter_entry_id,
-                    &format!("Player {}", fighter_entry_id + 1),
-                    fighter_kind);
+                    &player_tag,
+                    fighter_kind,
+                    fighter_skin);
             game_info.set_stage(unsafe { get_stage_id() });
 
             if game_info.have_enough_info_to_start_match() {
@@ -244,6 +251,10 @@ pub fn once_per_frame_per_fighter(fighter : &mut L2CFighterCommon) {
 
     // This is true if the opponent is in hitlag
     let opponent_in_hitlag = unsafe { lua_bind::FighterStopModuleImpl::is_damage_stop(module_accessor) };
+
+    //let button = unsafe { lua_bind::ControlModule::get_button(module_accessor) };
+
+    //println!("hitlag_left: {}, opponent_in_hitlag: {}, button: {:#04x}", hitlag_left, opponent_in_hitlag, button as u32);
 
     protocol::broadcast_fighter_info(&SERVER,
         frames_left,

@@ -3,14 +3,12 @@ use crate::game_info::GameInfo;
 use crate::training_info::TrainingInfo;
 use crate::server::Server;
 use crate::constants;
-use std::net::TcpStream;
-use std::io::Write;
-use std::convert::TryFrom;
 use crc::{Crc, CRC_32_CKSUM};
+use skyline::libc;
 
 #[derive(IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
-enum MessageType {
+pub enum MessageType {
     ProtocolVersion,
 
     MappingInfoChecksum,
@@ -33,36 +31,22 @@ enum MessageType {
     FighterState,
 }
 
-pub fn recv_data(buf: &[u8; 32], len: usize, stream: &TcpStream) -> std::io::Result<()> {
-    for i in 0..len {
-        match MessageType::try_from(buf[i]) {
-            Ok(MessageType::ProtocolVersion) => send_protocol_version(stream)?,
-            Ok(MessageType::MappingInfoChecksum) => send_mapping_info_checksum(stream)?,
-            Ok(MessageType::MappingInfoRequest) => send_mapping_info(stream)?,
-            Ok(MessageType::MappingInfoFighterKinds) => {},
-            Ok(MessageType::MappingInfoFighterStatusKinds) => {},
-            Ok(MessageType::MappingInfoStageKinds) => {},
-            Ok(MessageType::MappingInfoHitStatusKinds) => {},
-            Ok(MessageType::MappingInfoRequestComplete) => {},
-            Ok(MessageType::MatchStart) => {},
-            Ok(MessageType::MatchResume) => send_match_resume(stream)?,
-            Ok(MessageType::MatchEnd) => {},
-            Ok(MessageType::TrainingStart) => {},
-            Ok(MessageType::TrainingResume) => send_training_resume(stream)?,
-            Ok(MessageType::TrainingEnd) => {},
-            Ok(MessageType::TrainingReset) => {},
-            Ok(MessageType::FighterState) => {},
-            Err(_) => {}
+fn send_bytes(socket: libc::c_int, bytes: &[u8]) -> Result<(), i64> {
+    unsafe {
+        let result = libc::send(socket, bytes.as_ptr() as *const _, bytes.len(), 0);
+        if result < 0 {
+            Err(*libc::errno_loc())
+        } else {
+            Ok(())
         }
     }
-    Ok(())
 }
 
-fn send_protocol_version(mut stream: &TcpStream) -> std::io::Result<()> {
+pub fn send_protocol_version(socket: libc::c_int) -> Result<(), i64> {
     let major = 0x01;
-    let minor = 0x00;
+    let minor = 0x01;
     println!("[ReFramed] Sending protocol version {}.{}", major, minor);
-    stream.write(&[MessageType::ProtocolVersion.into(), major, minor])?;
+    send_bytes(socket, &[MessageType::ProtocolVersion.into(), major, minor])?;
     Ok(())
 }
 
@@ -94,24 +78,24 @@ fn calc_mapping_info_checksum() -> u32 {
     digest.finalize()
 }
 
-fn send_mapping_info_checksum(mut stream: &TcpStream) -> std::io::Result<()> {
+pub fn send_mapping_info_checksum(socket: libc::c_int) -> Result<(), i64> {
     let [h0, h1, h2, h3] = calc_mapping_info_checksum().to_be_bytes();
-    stream.write(&[MessageType::MappingInfoChecksum.into(), h0, h1, h2, h3])?;
     println!("[ReFramed] Sending mapping info checksum");
+    send_bytes(socket, &[MessageType::MappingInfoChecksum.into(), h0, h1, h2, h3])?;
     Ok(())
 }
 
-pub fn send_mapping_info(mut stream: &TcpStream) -> std::io::Result<()> {
+pub fn send_mapping_info(socket: libc::c_int) -> Result<(), i64> {
     println!("[ReFramed] Sending mapping info");
 
     let [h0, h1, h2, h3] = calc_mapping_info_checksum().to_be_bytes();
-    stream.write(&[MessageType::MappingInfoRequest.into(), h0, h1, h2, h3])?;
+    send_bytes(socket, &[MessageType::MappingInfoRequest.into(), h0, h1, h2, h3])?;
 
-    send_fighter_kind_constants(stream)?;
-    send_fighter_status_kind_constants(stream)?;
-    send_stage_constants(stream)?;
-    send_hit_status_constants(stream)?;
-    stream.write(&[MessageType::MappingInfoRequestComplete.into()])?;
+    send_fighter_kind_constants(socket)?;
+    send_fighter_status_kind_constants(socket)?;
+    send_stage_constants(socket)?;
+    send_hit_status_constants(socket)?;
+    send_bytes(socket, &[MessageType::MappingInfoRequestComplete.into()])?;
     Ok(())
 }
 
@@ -126,9 +110,11 @@ fn match_start_payload(info: &GameInfo) -> Vec<u8> {
         stage_id_u, stage_id_l,
         2,  // 2 players, hardcoded for now
         info.p1_entry_id() as u8,
-        info.p2_entry_id() as u8,
         info.p1_fighter_kind() as u8,
-        info.p2_fighter_kind() as u8
+        info.p1_fighter_skin() as u8,
+        info.p2_entry_id() as u8,
+        info.p2_fighter_kind() as u8,
+        info.p2_fighter_skin() as u8
     ];
     data.push(p1name_bytes.len() as u8);
     data.extend_from_slice(p1name_bytes);
@@ -150,12 +136,18 @@ pub fn broadcast_match_start(server: &Server, info: &GameInfo) {
     server.broadcast(&data);
 }
 
-fn send_match_resume(mut stream: &TcpStream) -> std::io::Result<()> {
+pub fn send_match_resume(socket: libc::c_int) -> Result<(), i64> {
     let game_info = GameInfo::get().lock().unwrap();
     if game_info.match_is_running() {
         let mut data = match_start_payload(&game_info);
         data.insert(0, MessageType::MatchResume.into());
-        stream.write(&data)?;
+
+        println!("[ReFramed] Match resume: stage: {}, p1: {} ({}), p2: {} ({})",
+            game_info.get_stage(),
+            game_info.p1_name(), game_info.p1_fighter_kind(),
+            game_info.p2_name(), game_info.p2_fighter_kind()
+        );
+        send_bytes(socket, &data)?;
     }
     Ok(())
 }
@@ -177,7 +169,7 @@ fn training_start_payload(info: &TrainingInfo) -> [u8; 4] {
 }
 
 pub fn broadcast_training_start(server: &Server, info: &TrainingInfo) {
-    println!("[ReFramed] Training Start: stage: {}, p1: {}, cpu: {}",
+    println!("[ReFramed] Training start: stage: {}, p1: {}, cpu: {}",
         info.get_stage(),
         info.p1_fighter_kind(),
         info.cpu_fighter_kind()
@@ -189,13 +181,19 @@ pub fn broadcast_training_start(server: &Server, info: &TrainingInfo) {
     server.broadcast(&data);
 }
 
-fn send_training_resume(mut stream: &TcpStream) -> std::io::Result<()> {
+pub fn send_training_resume(socket: libc::c_int) -> Result<(), i64> {
     let training_info = TrainingInfo::get().lock().unwrap();
     if training_info.is_running() {
         let mut data: Vec<u8> = Vec::new();
         data.push(MessageType::TrainingResume.into());
         data.extend_from_slice(&training_start_payload(&training_info));
-        stream.write(&data)?;
+
+        println!("[ReFramed] Training resume: stage: {}, p1: {}, cpu: {}",
+            training_info.get_stage(),
+            training_info.p1_fighter_kind(),
+            training_info.cpu_fighter_kind()
+        );
+        send_bytes(socket, &data)?;
     }
     Ok(())
 }
@@ -271,7 +269,7 @@ pub fn broadcast_fighter_info(
     ]);
 }
 
-fn send_fighter_kind_constants(mut stream: &TcpStream) -> std::io::Result<()> {
+fn send_fighter_kind_constants(socket: libc::c_int) -> Result<(), i64> {
     let mut buf = vec![];
     for (kind, name) in constants::FIGHTER_KINDS.iter() {
         let name_bytes = name.as_bytes();
@@ -279,11 +277,11 @@ fn send_fighter_kind_constants(mut stream: &TcpStream) -> std::io::Result<()> {
         let data = &[data, name_bytes].concat();
         buf.extend_from_slice(data);
     }
-    stream.write(&buf)?;
+    send_bytes(socket, &buf)?;
     Ok(())
 }
 
-fn send_stage_constants(mut stream: &TcpStream) -> std::io::Result<()> {
+fn send_stage_constants(socket: libc::c_int) -> Result<(), i64> {
     let mut buf = vec![];
     for (kind, name) in constants::STAGE_KINDS.iter() {
         let name_bytes = name.as_bytes();
@@ -292,17 +290,17 @@ fn send_stage_constants(mut stream: &TcpStream) -> std::io::Result<()> {
         let data = &[data, name_bytes].concat();
         buf.extend_from_slice(data);
     }
-    stream.write(&buf)?;
+    send_bytes(socket, &buf)?;
     Ok(())
 }
 
-fn send_fighter_status_kind_constants(mut stream: &TcpStream) -> std::io::Result<()> {
+fn send_fighter_status_kind_constants(socket: libc::c_int) -> Result<(), i64> {
     for (status, fighter, name) in constants::FIGHTER_STATUS_KINDS.iter() {
         let name_bytes = name.as_bytes();
         let [status0, status1] = (status.as_lua_int().get_int() as u16).to_be_bytes();
         let data = &[MessageType::MappingInfoFighterStatusKinds.into(), fighter.as_lua_int().get_int() as u8, status0, status1, name_bytes.len() as u8];
         let data = &[data, name_bytes].concat();
-        stream.write(&data)?;
+        send_bytes(socket, &data)?;
 
         // Something horrible happens if we don't do this
         std::thread::sleep(std::time::Duration::from_millis(3));
@@ -310,7 +308,7 @@ fn send_fighter_status_kind_constants(mut stream: &TcpStream) -> std::io::Result
     Ok(())
 }
 
-fn send_hit_status_constants(mut stream: &TcpStream) -> std::io::Result<()> {
+fn send_hit_status_constants(socket: libc::c_int) -> Result<(), i64> {
     let mut buf = vec![];
     for (kind, name) in constants::HIT_STATUS_KINDS.iter() {
         let name_bytes = name.as_bytes();
@@ -318,7 +316,7 @@ fn send_hit_status_constants(mut stream: &TcpStream) -> std::io::Result<()> {
         let data = &[data, name_bytes].concat();
         buf.extend_from_slice(data);
     }
-    stream.write(&buf)?;
+    send_bytes(socket, &buf)?;
     Ok(())
 }
 

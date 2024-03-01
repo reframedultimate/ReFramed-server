@@ -13,10 +13,12 @@ pub struct GameInfo {
     p1_entry_id: i32,
     p1_name: String,
     p1_fighter_kind: i32,
+    p1_fighter_skin: i32,
 
     p2_entry_id: i32,
     p2_name: String,
-    p2_fighter_kind: i32
+    p2_fighter_kind: i32,
+    p2_fighter_skin: i32
 }
 
 impl GameInfo {
@@ -31,9 +33,11 @@ impl GameInfo {
             p1_entry_id: -1,
             p1_name: "".to_string(),
             p1_fighter_kind: -1,
+            p1_fighter_skin: -1,
             p2_entry_id: -1,
             p2_name: "".to_string(),
-            p2_fighter_kind: -1
+            p2_fighter_kind: -1,
+            p2_fighter_skin: -1
         }
     }
 
@@ -55,15 +59,17 @@ impl GameInfo {
         self.match_is_running
     }
 
-    pub fn set_player_info(&mut self, entry_id: i32, name: &str, fighter_kind: i32) {
+    pub fn set_player_info(&mut self, entry_id: i32, name: &str, fighter_kind: i32, fighter_skin: i32) {
         if self.p1_entry_id == -1 {
             self.p1_entry_id = entry_id;
             self.p1_name = name.to_string();
             self.p1_fighter_kind = fighter_kind;
+            self.p1_fighter_skin = fighter_skin;
         } else {            
             self.p2_entry_id = entry_id;
             self.p2_name = name.to_string();
             self.p2_fighter_kind = fighter_kind;
+            self.p2_fighter_skin = fighter_skin;
         }
     }
 
@@ -76,9 +82,11 @@ impl GameInfo {
     pub fn p1_entry_id(&self) -> i32 { self.p1_entry_id }
     pub fn p1_name(&self) -> &String { &self.p1_name }
     pub fn p1_fighter_kind(&self) -> i32 { self.p1_fighter_kind }
+    pub fn p1_fighter_skin(&self) -> i32 { self.p1_fighter_skin }
 
     pub fn p2_entry_id(&self) -> i32 { self.p2_entry_id }
     pub fn p2_name(&self) -> &String { &self.p2_name }
     pub fn p2_fighter_kind(&self) -> i32 { self.p2_fighter_kind }
+    pub fn p2_fighter_skin(&self) -> i32 { self.p2_fighter_skin }
 }
 
