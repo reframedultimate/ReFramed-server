@@ -1,21 +1,20 @@
 [package]
-name = "reframed-server"
+name = "reframed_server"
 version = "0.1.0"
 authors = ["TheComet <alex.murray@gmx.ch>"]
-edition = "2018"
+edition = "2021"
 
 [package.metadata.skyline]
-titleid = "01006A800016E000"
+titleid = "01006A800016E000" # Smash Ultimate
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
+crc = "3.0.1"
 lazy_static = "1.4.0"
-crc = "2.1"
-num = "0.4"
-num_enum = "0.5.1"
-skyline = { git = "https://github.com/ultimate-research/skyline-rs.git" }
+num_enum = "0.7.2"
+skyline = "0.2.0"
 skyline_smash = { git = "https://github.com/ultimate-research/skyline-smash.git" }
 acmd = { git = "https://github.com/ultimate-research/skyline-acmd.git" }
 
@@ -25,4 +24,3 @@ panic = "abort"
 [profile.release]
 panic = "abort"
 lto = true
-
